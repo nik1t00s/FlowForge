@@ -1,0 +1,4 @@
+paho-mqtt==1.6.1
+opencv-python==4.8.0.76
+pillow==10.0.1
+clickhouse-driver==0.2.6
