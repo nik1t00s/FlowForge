@@ -1,0 +1,39 @@
+version: '3'
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:latest
+    ports:
+      - "1883:1883"
+    networks:
+      - data_network
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    ports:
+      - "8123:8123"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    networks:
+      - data_network
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    networks:
+      - data_network
+
+  python-service:
+    build: ./python-microservice
+    depends_on:
+      - mosquitto
+      - clickhouse
+    networks:
+      - data_network
+
+networks:
+  data_network:
+
+volumes:
+  clickhouse_data:
