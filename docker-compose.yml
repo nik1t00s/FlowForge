@@ -43,3 +43,4 @@ networks:
 
 volumes:
   clickhouse_data:
+  grafana_data:
