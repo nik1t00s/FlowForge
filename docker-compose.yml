@@ -12,6 +12,13 @@ services:
     image: clickhouse/clickhouse-server:latest
     ports:
       - "8123:8123"
+      - "9000:9000"
+    command: ["--listen_host=0.0.0.0"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8123/ping"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
     volumes:
       - clickhouse_data:/var/lib/clickhouse
     networks:
@@ -33,13 +40,17 @@ services:
   python-service:
     build: ./python-microservice
     depends_on:
-      - mosquitto
-      - clickhouse
+      mosquitto:
+        condition: service_started
+      clickhouse:
+        condition: service_started
     networks:
       - data_network
 
 networks:
   data_network:
+    name: flowforge_data_network
+    driver: bridge
 
 volumes:
   clickhouse_data:
