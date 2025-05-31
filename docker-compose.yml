@@ -3,6 +3,8 @@ services:
     image: eclipse-mosquitto:latest
     ports:
       - "1883:1883"
+    volumes:
+      - ./test_images:/test_images
     networks:
       - data_network
 
@@ -16,11 +18,17 @@ services:
       - data_network
 
   grafana:
-    image: grafana/grafana:latest
+    build: ./grafana
     ports:
       - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
     networks:
       - data_network
+    environment:
+      GF_INSTALL_PLUGINS: "vertamedia-clickhouse-datasource"
+    depends_on:
+      - clickhouse
 
   python-service:
     build: ./python-microservice
