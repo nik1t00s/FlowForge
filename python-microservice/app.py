@@ -12,6 +12,15 @@ CLICKHOUSE_TABLE = "images_metadata"
 
 ch_client = Client(host=CLICKHOUSE_HOST)
 
+ch_client.execute('''
+CREATE TABLE IF NOT EXISTS images_metadata (
+    timestamp DateTime DEFAULT now(),
+    source String
+) ENGINE = MergeTree()
+ORDER BY timestamp
+''')
+print("Таблица images_metadata создана/проверена")
+
 def on_message(client, userdata, msg):
     img = cv2.imdecode(np.frombuffer(msg.payload, dtype=np.uint8), cv2.IMREAD_COLOR)
     
