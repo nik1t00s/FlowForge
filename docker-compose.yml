@@ -1,57 +1,105 @@
 services:
   mosquitto:
     image: eclipse-mosquitto:latest
+    hostname: mosquitto
     ports:
       - "1883:1883"
     volumes:
       - ./test_images:/test_images
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
     networks:
-      - data_network
+      data_network:
+        aliases:
+          - mqtt-broker
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 5 sh -c 'echo -e \"PING\" | nc localhost 1883'"]
+      interval: 5s
+      timeout: 10s
+      retries: 5
 
   clickhouse:
     image: clickhouse/clickhouse-server:latest
+    hostname: clickhouse
     ports:
       - "8123:8123"
       - "9000:9000"
-    command: ["--listen_host=0.0.0.0"]
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8123/ping"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8123/ping"]
       interval: 5s
       timeout: 10s
       retries: 10
     volumes:
       - clickhouse_data:/var/lib/clickhouse
+    environment:
+      - TZ=Europe/Moscow
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_PASSWORD=password
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+      - CLICKHOUSE_LISTEN_HOST=0.0.0.0
+      - CLICKHOUSE_LOGGER_CONSOLE=1
     networks:
-      - data_network
+      data_network:
+        aliases:
+          - clickhouse-db
 
   grafana:
     build: ./grafana
+    hostname: grafana
     ports:
       - "3000:3000"
     volumes:
       - grafana_data:/var/lib/grafana
     networks:
-      - data_network
+      data_network:
+        aliases:
+          - grafana-ui
     environment:
       GF_INSTALL_PLUGINS: "vertamedia-clickhouse-datasource"
     depends_on:
-      - clickhouse
+      clickhouse:
+        condition: service_healthy
 
   python-service:
     build: ./python-microservice
+    hostname: python-service
     depends_on:
       mosquitto:
-        condition: service_started
+        condition: service_healthy
       clickhouse:
-        condition: service_started
+        condition: service_healthy
     networks:
-      - data_network
+      data_network:
+        aliases:
+          - image-processor
+    environment:
+      - MQTT_HOST=mqtt-broker
+      - MQTT_PORT=1883
+      - CLICKHOUSE_HOST=clickhouse-db
+      - CLICKHOUSE_PORT=9000
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./test_images:/app/test_images
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect(('localhost', 8000)); s.close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 networks:
   data_network:
     name: flowforge_data_network
     driver: bridge
+    attachable: true
 
 volumes:
   clickhouse_data:
+    driver: local
   grafana_data:
+    driver: local
