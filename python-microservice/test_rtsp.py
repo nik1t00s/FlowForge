@@ -5,6 +5,7 @@ Simple RTSP test script to verify functionality
 import cv2
 import time
 import sys
+import os
 
 def test_rtsp_stream(rtsp_url: str, duration: int = 10):
     """Test RTSP stream connection and frame reading"""
@@ -56,8 +57,8 @@ def test_rtsp_stream(rtsp_url: str, duration: int = 10):
         print("🔒 Stream closed")
 
 def main():
-    # Test local RTSP server
-    rtsp_url = "rtsp://localhost:8554/test"
+    # Get RTSP URL from environment variable or use default
+    rtsp_url = os.environ.get("RTSP_URL", "rtsp://rtsp-simulator:8554/test")
     
     if len(sys.argv) > 1:
         rtsp_url = sys.argv[1]
