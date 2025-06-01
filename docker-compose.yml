@@ -18,6 +18,11 @@ services:
       interval: 5s
       timeout: 10s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: 128M
 
   clickhouse:
     image: clickhouse/clickhouse-server:latest
@@ -43,6 +48,11 @@ services:
       data_network:
         aliases:
           - clickhouse-db
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
 
   grafana:
     build: ./grafana
@@ -60,6 +70,11 @@ services:
     depends_on:
       clickhouse:
         condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.3'
+          memory: 1G
 
   python-service:
     build: ./python-microservice
@@ -91,6 +106,12 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
 
 networks:
   data_network:
