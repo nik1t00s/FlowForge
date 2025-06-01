@@ -14,26 +14,30 @@ CLICKHOUSE_TABLE = "images_metadata"
 BRIGHTNESS_THRESHOLD = 50  # Порог фильтрации по яркости
 
 # Инициализация SQLite
-conn_sqlite = sqlite3.connect('metadata_cache.db', check_same_thread=False)
-cursor_sqlite = conn_sqlite.cursor()
-cursor_sqlite.execute('''
-    CREATE TABLE IF NOT EXISTS metadata (
-        id INTEGER PRIMARY KEY,
-        timestamp DATETIME,
-        source TEXT,
-        brightness REAL,
-        processed BOOLEAN DEFAULT 0
-    )
-''')
-conn_sqlite.commit()
+def get_sqlite_connection():
+    conn = sqlite3.connect('metadata_cache.db', check_same_thread=False)
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS metadata (
+            id INTEGER PRIMARY KEY,
+            timestamp DATETIME,
+            source TEXT,
+            brightness REAL,
+            processed BOOLEAN DEFAULT 0
+        )
+    ''')
+    conn.commit()
+    return conn
+
+# Инициализация таблицы
+with get_sqlite_connection() as conn:
+    pass
 
 # Подключение к ClickHouse
 def connect_clickhouse():
     client = Client(
-        host="clickhouse",
+        host="clickhouse-db",
         user='default',
-        password='password',
-        settings={'use_numpy': True}
+        password='password'
     )
     client.execute(f'''
         CREATE TABLE IF NOT EXISTS {CLICKHOUSE_TABLE} (
@@ -52,39 +56,41 @@ def background_sender():
     while True:
         time.sleep(10)
         try:
-            cursor_sqlite.execute("SELECT * FROM metadata WHERE processed=0")
-            rows = cursor_sqlite.fetchall()
-            
-            if rows:
-                processed_count = 0
+            with get_sqlite_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT * FROM metadata WHERE processed=0")
+                rows = cursor.fetchall()
                 
-                for row in rows:
-                    # Обрабатываем каждую запись отдельно для упрощения
-                    if row[1] is not None:
-                        try:
-                            # Преобразуем строку в объект datetime и затем формируем для ClickHouse
-                            dt = datetime.strptime(row[1], "%Y-%m-%d %H:%M:%S.%f")
-                            
-                            # Простая вставка одной записи
-                            query = f"INSERT INTO {CLICKHOUSE_TABLE} (timestamp, source, brightness) VALUES"
-                            ch_client.execute(query, [(dt, row[2], float(row[3]))])
-                            
-                            # Помечаем как обработанную
-                            cursor_sqlite.execute("UPDATE metadata SET processed=1 WHERE id=?", (row[0],))
-                            conn_sqlite.commit()
-                            processed_count += 1
-                        except Exception as e:
-                            print(f"Ошибка при вставке записи {row[0]}: {str(e)}")
-                    else:
-                        print(f"Skipping row with NULL timestamp: {row}")
-                        # Помечаем как обработанную, чтобы не пытаться обработать снова
-                        cursor_sqlite.execute("UPDATE metadata SET processed=1 WHERE id=?", (row[0],))
-                        conn_sqlite.commit()
-                
-                if processed_count > 0:
-                    print(f"Отправлено {processed_count} записей в ClickHouse")
-                
-                
+                if rows:
+                    processed_count = 0
+                    
+                    for row in rows:
+                        # Обрабатываем каждую запись отдельно для упрощения
+                        if row[1] is not None:
+                            try:
+                                # Преобразуем строку в объект datetime и затем формируем для ClickHouse
+                                dt = datetime.strptime(row[1], "%Y-%m-%d %H:%M:%S.%f")
+                                
+                                # Простая вставка одной записи
+                                query = f"INSERT INTO {CLICKHOUSE_TABLE} (timestamp, source, brightness) VALUES"
+                                ch_client.execute(query, [(dt, row[2], float(row[3]))])
+                                
+                                # Помечаем как обработанную
+                                cursor.execute("UPDATE metadata SET processed=1 WHERE id=?", (row[0],))
+                                conn.commit()
+                                processed_count += 1
+                            except Exception as e:
+                                print(f"Ошибка при вставке записи {row[0]}: {str(e)}")
+                        else:
+                            print(f"Skipping row with NULL timestamp: {row}")
+                            # Помечаем как обработанную, чтобы не пытаться обработать снова
+                            cursor.execute("UPDATE metadata SET processed=1 WHERE id=?", (row[0],))
+                            conn.commit()
+                    
+                    if processed_count > 0:
+                        print(f"Отправлено {processed_count} записей в ClickHouse")
+                    
+                    
         except Exception as e:
             print(f"Ошибка фоновой отправки: {str(e)}")
             import traceback
@@ -124,11 +130,13 @@ def on_message(client, userdata, msg):
         
         # Сохранение в SQLite
         timestamp = datetime.now()
-        cursor_sqlite.execute(
-            "INSERT INTO metadata (timestamp, source, brightness) VALUES (?, ?, ?)",
-            (timestamp.strftime("%Y-%m-%d %H:%M:%S.%f"), msg.topic, float(brightness))
-        )
-        conn_sqlite.commit()
+        with get_sqlite_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO metadata (timestamp, source, brightness) VALUES (?, ?, ?)",
+                (timestamp.strftime("%Y-%m-%d %H:%M:%S.%f"), msg.topic, float(brightness))
+            )
+            conn.commit()
         
     except Exception as e:
         print(f"Ошибка обработки: {str(e)}")

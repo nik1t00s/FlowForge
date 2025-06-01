@@ -22,7 +22,7 @@ for i in range(1000):
 
     with open(f"/app/test_images/image_{i % 10}.jpg", "rb") as f:
         client.publish("images/raw", f.read())
-    print(f"Отправлено изображение {i+1}/1000")
+    ## print(f"Отправлено изображение {i+1}/1000")
     time.sleep(0.01)  # Имитация сетевого ограничения
 
 client.disconnect()
