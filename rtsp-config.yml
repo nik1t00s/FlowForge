@@ -1,35 +1,19 @@
-# MediaMTX Configuration
+paths:
+  test:
+    runOnInit: ffmpeg -re -stream_loop -1 -i /test_videos/sample.mp4 -c:v copy -c:a copy -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/test
+    runOnInitRestart: yes
+  video1:
+    runOnInit: ffmpeg -re -stream_loop -1 -i /test_videos/sample.mp4 -c:v copy -c:a copy -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:8554/video1
+    runOnInitRestart: yes
+
 api: yes
-apiAddress: 0.0.0.0:9997
-
+apiAddress: :9997
 metrics: yes
-metricsAddress: 0.0.0.0:9998
-
+metricsAddress: :9998
 pprof: no
-
-logLevel: info
+logLevel: debug
 logDestinations: [stdout]
-
 rtspAddress: :8554
 rtmpAddress: :1935
 hlsAddress: :8888
 webrtcAddress: :8889
-
-paths:
-  # Stream from test video file  
-  test:
-    source: publisher
-    
-  # Stream from webcam (if available)
-  webcam:
-    source: publisher
-    
-  # Example with file streaming
-  video1:
-    source: file:///test_videos/sample.mp4
-    sourceOnDemand: yes
-    
-  # Another video stream
-  video2:
-    source: publisher
-

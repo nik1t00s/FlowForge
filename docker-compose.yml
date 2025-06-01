@@ -77,7 +77,9 @@ services:
           memory: 256M
 
   rtsp-simulator:
-    image: bluenviron/mediamtx
+    build:
+      context: .
+      dockerfile: rtsp-simulator.Dockerfile
     hostname: rtsp-simulator
     ports:
       - "8554:8554"  # RTSP port
@@ -90,7 +92,7 @@ services:
     networks:
       - data_network
     healthcheck:
-      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:9997/v1/config || exit 1"]
+      test: ["CMD-SHELL", "nc -z localhost 8554 || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -118,9 +120,8 @@ services:
       - RTSP_URL=rtsp://rtsp-simulator:8554/test
     volumes:
       - ./test_images:/app/test_images
-      - ./python-microservice/data:/app/data
     healthcheck:
-      test: ["CMD", "python", "-c", "import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect(('localhost', 8000)); s.close()"]
+      test: ["CMD", "nc", "-z", "mqtt-broker", "1883"]
       interval: 10s
       timeout: 5s
       retries: 3
