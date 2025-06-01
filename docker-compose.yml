@@ -74,7 +74,7 @@ services:
       resources:
         limits:
           cpus: '0.3'
-          memory: 1G
+          memory: 256M
 
   python-service:
     build: ./python-microservice

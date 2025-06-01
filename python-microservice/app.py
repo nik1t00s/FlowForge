@@ -50,35 +50,41 @@ ch_client = connect_clickhouse()
 # Фоновая отправка данных в ClickHouse
 def background_sender():
     while True:
-        time.sleep(10)  # Отправка каждые 10 секунд
+        time.sleep(10)
         try:
             cursor_sqlite.execute("SELECT * FROM metadata WHERE processed=0")
             rows = cursor_sqlite.fetchall()
             
             if rows:
-                data = []
+                processed_count = 0
+                
                 for row in rows:
-                    data.append({
-                        'timestamp': datetime.strptime(row[1], "%Y-%m-%d %H:%M:%S.%f"),
-                        'source': str(row[2]),  # Явное преобразование в string
-                        'brightness': float(row[3])
-                    })
+                    # Обрабатываем каждую запись отдельно для упрощения
+                    if row[1] is not None:
+                        try:
+                            # Преобразуем строку в объект datetime и затем формируем для ClickHouse
+                            dt = datetime.strptime(row[1], "%Y-%m-%d %H:%M:%S.%f")
+                            
+                            # Простая вставка одной записи
+                            query = f"INSERT INTO {CLICKHOUSE_TABLE} (timestamp, source, brightness) VALUES"
+                            ch_client.execute(query, [(dt, row[2], float(row[3]))])
+                            
+                            # Помечаем как обработанную
+                            cursor_sqlite.execute("UPDATE metadata SET processed=1 WHERE id=?", (row[0],))
+                            conn_sqlite.commit()
+                            processed_count += 1
+                        except Exception as e:
+                            print(f"Ошибка при вставке записи {row[0]}: {str(e)}")
+                    else:
+                        print(f"Skipping row with NULL timestamp: {row}")
+                        # Помечаем как обработанную, чтобы не пытаться обработать снова
+                        cursor_sqlite.execute("UPDATE metadata SET processed=1 WHERE id=?", (row[0],))
+                        conn_sqlite.commit()
                 
-                ch_client.execute(
-                    f"INSERT INTO {CLICKHOUSE_TABLE} (timestamp, source, brightness) VALUES",
-                    data,
-                    types_check=True
-                )
+                if processed_count > 0:
+                    print(f"Отправлено {processed_count} записей в ClickHouse")
                 
-                # Пометить как обработанные
-                ids = [row[0] for row in rows]
-                cursor_sqlite.executemany(
-                    "UPDATE metadata SET processed=1 WHERE id=?",
-                    [(id,) for id in ids]
-                )
-                conn_sqlite.commit()
-                print(f"Отправлено {len(rows)} записей в ClickHouse")
-
+                
         except Exception as e:
             print(f"Ошибка фоновой отправки: {str(e)}")
             import traceback
@@ -120,7 +126,7 @@ def on_message(client, userdata, msg):
         timestamp = datetime.now()
         cursor_sqlite.execute(
             "INSERT INTO metadata (timestamp, source, brightness) VALUES (?, ?, ?)",
-            (str(timestamp), msg.topic, float(brightness))
+            (timestamp.strftime("%Y-%m-%d %H:%M:%S.%f"), msg.topic, float(brightness))
         )
         conn_sqlite.commit()
         
