@@ -51,8 +51,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.0'
-          memory: 2G
+          cpus: '0.5'
+          memory: 512M
 
   grafana:
     build: ./grafana
@@ -76,6 +76,27 @@ services:
           cpus: '0.3'
           memory: 256M
 
+  rtsp-simulator:
+    build:
+      context: .
+      dockerfile: rtsp-simulator.Dockerfile
+    hostname: rtsp-simulator
+    ports:
+      - "8554:8554"  # RTSP port
+      - "9997:9997"  # API port
+      - "9998:9998"  # Metrics port
+      - "8888:8888"  # HLS port
+    volumes:
+      - ./test_videos:/test_videos
+      - ./rtsp-config.yml:/mediamtx.yml
+    networks:
+      - data_network
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 8554 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
   python-service:
     build: ./python-microservice
     hostname: python-service
@@ -83,6 +104,8 @@ services:
       mosquitto:
         condition: service_healthy
       clickhouse:
+        condition: service_healthy
+      rtsp-simulator:
         condition: service_healthy
     networks:
       data_network:
@@ -94,10 +117,11 @@ services:
       - CLICKHOUSE_HOST=clickhouse-db
       - CLICKHOUSE_PORT=9000
       - PYTHONUNBUFFERED=1
+      - RTSP_URL=rtsp://rtsp-simulator:8554/test
     volumes:
       - ./test_images:/app/test_images
     healthcheck:
-      test: ["CMD", "python", "-c", "import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect(('localhost', 8000)); s.close()"]
+      test: ["CMD", "nc", "-z", "mqtt-broker", "1883"]
       interval: 10s
       timeout: 5s
       retries: 3
