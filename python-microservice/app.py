@@ -173,8 +173,7 @@ class ImageBatchProcessor:
             # Read image
             img = cv2.imread(filepath)
             if img is None:
-                logger.warning(f"Could not read image: {filepath}")
-                return
+                raise ValueError(f"Could not read image: {filepath}")
             
             # Resize image
             resized = cv2.resize(img, (640, 360))
@@ -199,6 +198,7 @@ class ImageBatchProcessor:
                 
         except Exception as e:
             logger.error(f"Error processing image {filepath}: {e}")
+            raise
     
     def get_stats(self) -> dict:
         """Get processing statistics"""
@@ -226,8 +226,7 @@ def get_sqlite_connection():
     return conn
 
 # Инициализация таблицы
-with get_sqlite_connection() as conn:
-    pass
+# The database is initialized in main(), not during import.
 
 # Подключение к ClickHouse
 def connect_clickhouse():
@@ -246,7 +245,7 @@ def connect_clickhouse():
     ''')
     return client
 
-ch_client = connect_clickhouse()
+ch_client = None
 
 # Фоновая отправка данных в ClickHouse
 def background_sender():
@@ -384,26 +383,36 @@ def print_stats():
         except Exception as e:
             logger.error(f"Error printing stats: {e}")
 
-# Запуск фонового потока
-threading.Thread(target=background_sender, daemon=True).start()
+def main():
+    """Initialize services and run the MQTT loop only on an explicit launch."""
+    global ch_client
+    with get_sqlite_connection():
+        pass
+    ch_client = connect_clickhouse()
+    # Запуск фонового потока
+    threading.Thread(target=background_sender, daemon=True).start()
 
-# Initialize processors
-initialize_processors()
+    # Initialize processors
+    initialize_processors()
 
-# Start stats thread
-threading.Thread(target=print_stats, daemon=True).start()
+    # Start stats thread
+    threading.Thread(target=print_stats, daemon=True).start()
 
-try:
-    # MQTT Клиент
-    client = mqtt.Client()
-    client.connect(MQTT_BROKER, 1883)
-    client.subscribe(MQTT_TOPIC)
-    client.on_message = on_message
+    try:
+        # MQTT Клиент
+        client = mqtt.Client()
+        client.connect(MQTT_BROKER, 1883)
+        client.subscribe(MQTT_TOPIC)
+        client.on_message = on_message
     
-    logger.info("Starting MQTT client loop...")
-    client.loop_forever()
+        logger.info("Starting MQTT client loop...")
+        client.loop_forever()
     
-except KeyboardInterrupt:
-    logger.info("Shutting down...")
-finally:
-    cleanup_processors()
+    except KeyboardInterrupt:
+        logger.info("Shutting down...")
+    finally:
+        cleanup_processors()
+
+
+if __name__ == "__main__":
+    main()
